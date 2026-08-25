@@ -81,4 +81,11 @@ describe('tailEndsWithConnectionDrop', () => {
   it('returns false when the last API Error is not connection-level', () => {
     expect(tailEndsWithConnectionDrop('API Error: 429 Too Many Requests')).toBe(false);
   });
+
+  it('rejects a quoted signature mid-report followed by long body text', () => {
+    // 自引用误报：助手报告复述断连签名，其后还有大量正文。
+    const report = '取证报告：断连签名为 API Error: 代理或上游连接读取失败，部分响应已成功传输。'
+      + '后续正文。'.repeat(200);
+    expect(tailEndsWithConnectionDrop(appendTextTail('', report))).toBe(false);
+  });
 });

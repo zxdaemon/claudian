@@ -13,7 +13,6 @@ import type { NavigationController } from '../controllers/NavigationController';
 import type { SelectionController } from '../controllers/SelectionController';
 import type { StreamController } from '../controllers/StreamController';
 import type { ChatExecutionCoordinator } from '../execution/ChatExecutionCoordinator';
-import type { AutoResumeController } from './AutoResumeController';
 import type { LinkedContentController } from '../linked-content';
 import type { MessageRenderer } from '../rendering/MessageRenderer';
 import type { SubagentManager } from '../services/SubagentManager';
@@ -35,6 +34,7 @@ import type {
 import type { InstructionModeManager } from '../ui/InstructionModeManager';
 import type { NavigationSidebar } from '../ui/NavigationSidebar';
 import type { StatusPanel } from '../ui/StatusPanel';
+import type { AutoResumeController } from './AutoResumeController';
 import type { TabSession } from './TabSession';
 
 /**

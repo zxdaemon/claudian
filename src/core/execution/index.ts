@@ -1,15 +1,15 @@
 export {
+  AUTO_RESUME_BACKOFF_SECONDS,
+  AUTO_RESUME_MAX_ATTEMPTS,
+  nextBackoffDelaySeconds,
+} from './autoResumeBackoff';
+export {
   type ProviderExecutionBackend,
   type ProviderNativePersistence,
   type ProviderNativeResumeSeed,
   type ProviderSessionConfig,
   type ProviderSessionLifecycle,
 } from './ProviderExecutionBackend';
-export {
-  AUTO_RESUME_BACKOFF_SECONDS,
-  AUTO_RESUME_MAX_ATTEMPTS,
-  nextBackoffDelaySeconds,
-} from './autoResumeBackoff';
 export {
   type ProviderAssistantMessageStartedEvent,
   type ProviderAsyncSubagentCompletedEvent,

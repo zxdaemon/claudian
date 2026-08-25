@@ -51,9 +51,15 @@ export function appendTextTail(current: string, delta: string): string {
 /**
  * turn 结束时的文本尾巴是否以断连错误消息收尾。
  * 在窗口内找最后一个 "API Error:" 出现点，从该点判断整段。
+ * 该出现点必须贴近尾巴末尾：真实断连消息是 turn 的最后文本；
+ * 助手输出中复述签名（如取证报告引用断连原文）时其后还有大量正文，
+ * 用距离排除这类自引用误报（实测 2026-08-25 假阳性根因）。
  */
+const MAX_SIGNATURE_END_SPAN = 512;
+
 export function tailEndsWithConnectionDrop(textTail: string): boolean {
   const index = textTail.lastIndexOf(API_ERROR_PREFIX);
   if (index < 0) return false;
+  if (textTail.length - index > MAX_SIGNATURE_END_SPAN) return false;
   return isConnectionDropMessage(textTail.slice(index));
 }

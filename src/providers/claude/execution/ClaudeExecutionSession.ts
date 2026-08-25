@@ -34,10 +34,6 @@ import { executeClaudeRewind } from '../runtime/ClaudeRewindService';
 import { getClaudeState } from '../types/providerState';
 import { ClaudeExecutionEventNormalizer } from './ClaudeExecutionEventNormalizer';
 import {
-  appendTextTail,
-  tailEndsWithConnectionDrop,
-} from './ConnectionDropDetector';
-import {
   type ClaudeEncodedExecutionRequest,
   ClaudeExecutionRequestEncoder,
   type ClaudeNativeResume,
@@ -49,6 +45,10 @@ import {
   ClaudePersistentExecutionStrategy,
 } from './ClaudeExecutionStrategies';
 import { ClaudeInteractionHandler } from './ClaudeInteractionHandler';
+import {
+  appendTextTail,
+  tailEndsWithConnectionDrop,
+} from './ConnectionDropDetector';
 
 interface ActiveRequestedRun {
   readonly executionId: string;

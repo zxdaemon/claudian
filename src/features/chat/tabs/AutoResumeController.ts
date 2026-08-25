@@ -44,7 +44,7 @@ export class AutoResumeController {
   private dropsInARow = 0;
   private stopped = false;
   private disposed = false;
-  private timer: ReturnType<typeof setTimeout> | null = null;
+  private timer: number | null = null;
   private pendingFire = false;
   private rescheduleCount = 0;
 
@@ -89,6 +89,7 @@ export class AutoResumeController {
     this.cancelTimer();
     // 单飞：已有其他 tab 在调度时，本 tab 静默放弃。
     if (schedulingController && schedulingController !== this) return;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- 单飞锁需要控制器身份比较，非 this 别名用法
     schedulingController = this;
     this.deps.notice(
       `ARCD：检测到连接中断，${delaySeconds}s 后自动恢复（第 ${this.dropsInARow} 次）`,
@@ -96,7 +97,7 @@ export class AutoResumeController {
     void this.deps.appendLog(
       `DROP #${this.dropsInARow} backoff=${delaySeconds}s: ${event.category} ${event.message}`,
     );
-    this.timer = setTimeout(() => {
+    this.timer = window.setTimeout(() => {
       this.timer = null;
       void this.fire();
     }, delaySeconds * 1000);
@@ -118,7 +119,7 @@ export class AutoResumeController {
         return;
       }
       this.rescheduleCount += 1;
-      this.timer = setTimeout(() => {
+      this.timer = window.setTimeout(() => {
         this.timer = null;
         void this.fire();
       }, 30_000);
@@ -143,7 +144,7 @@ export class AutoResumeController {
           if (schedulingController === this) schedulingController = null;
           return;
         }
-        this.timer = setTimeout(() => {
+        this.timer = window.setTimeout(() => {
           this.timer = null;
           void this.fire();
         }, 30_000);
@@ -159,7 +160,7 @@ export class AutoResumeController {
 
   private cancelTimer(): void {
     if (this.timer !== null) {
-      clearTimeout(this.timer);
+      window.clearTimeout(this.timer);
       this.timer = null;
     }
   }

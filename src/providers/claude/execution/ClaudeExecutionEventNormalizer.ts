@@ -32,6 +32,7 @@ import {
   recalculateClaudeUsageContextWindow,
   transformSDKMessage,
 } from '../stream/transformClaudeMessage';
+import { looksLikeApiError } from './ConnectionDropDetector';
 
 type WithoutScope<T> = T extends unknown ? Omit<T, 'scope'> : never;
 
@@ -265,7 +266,7 @@ export class ClaudeExecutionEventNormalizer {
     if (
       message.type === 'assistant'
       && (
-        (chunk.type === 'text' && state.sawStreamText)
+        shouldDedupTextChunk(message, chunk, state.sawStreamText)
         || (chunk.type === 'thinking' && state.sawStreamThinking)
       )
     ) {
@@ -308,6 +309,24 @@ export class ClaudeExecutionEventNormalizer {
       target.push({ type: 'plan_exited' });
     }
   }
+}
+
+/**
+ * ARCD：assistant 终消息里的文本块是否应作为"已流式传输"去重。
+ * SDK 在流中断时会合成一条以 "API Error:" 开头的断连尾消息——该文本
+ * 从未被流式传输过，若按 sawStreamText 去重会被吞掉，导致
+ * finishCompleted 尾巴检测漏报（实测 2026-08-25 漏报根因）。
+ * 因此对看起来像 API Error 的文本块强制放行。
+ */
+export function shouldDedupTextChunk(
+  message: SDKMessage,
+  chunk: StreamChunk,
+  sawStreamText: boolean,
+): boolean {
+  if (message.type !== 'assistant') return false;
+  if (!sawStreamText) return false;
+  if (chunk.type !== 'text') return false;
+  return !looksLikeApiError(chunk.content);
 }
 
 function createNormalizationState(): NormalizationState {
