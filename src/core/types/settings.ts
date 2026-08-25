@@ -156,6 +156,9 @@ export interface ClaudianSettings {
   keyboardNavigation: KeyboardNavigationSettings;
   requireCommandOrControlEnterToSend: boolean;
 
+  // ARCD（fork）：连接断连自动唤醒开关。
+  autoResumeEnabled: boolean;
+
   // Internationalization
   locale: string;
 

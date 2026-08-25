@@ -33,6 +33,7 @@ export const DEFAULT_CLAUDIAN_SETTINGS: ClaudianSettings = {
     focusInputKey: 'i',
   },
   requireCommandOrControlEnterToSend: false,
+  autoResumeEnabled: true,
 
   locale: 'en',
 

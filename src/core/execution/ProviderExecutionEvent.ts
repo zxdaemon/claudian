@@ -305,6 +305,20 @@ export type ProviderSessionErrorEvent = ProviderEventBase<
     readonly recoverable: boolean;
   };
 
+/**
+ * ARCD（fork）：连接级断连信号。由 provider 会话在 run 终态时检测到
+ * 连接级失败（finishError transport/process-exited，或 result 尾巴带 API Error）
+ * 后发出。消费端据此执行退避式自动唤醒。
+ */
+export type ProviderConnectionDroppedEvent = ProviderEventBase<
+  'connection_dropped',
+  ProviderSessionEventScope
+> &
+  ProviderOpaqueEventPayload & {
+    readonly category: Extract<ProviderExecutionErrorCategory, 'transport' | 'process-exited'>;
+    readonly message: string;
+  };
+
 export type ProviderBackgroundOutputEvent =
   | (ProviderUserMessageStartedEvent & { readonly scope: ProviderBackgroundEventScope })
   | (ProviderAssistantMessageStartedEvent & { readonly scope: ProviderBackgroundEventScope })
@@ -327,6 +341,7 @@ export type ProviderSessionEvent =
   | ProviderAsyncSubagentCompletedEvent
   | (ProviderSessionStateChangedEvent & { readonly scope: ProviderSessionEventScope })
   | (ProviderModeChangedEvent & { readonly scope: ProviderSessionEventScope })
-  | ProviderSessionErrorEvent;
+  | ProviderSessionErrorEvent
+  | ProviderConnectionDroppedEvent;
 
 export type ProviderExecutionEvent = ProviderRequestedExecutionEvent;

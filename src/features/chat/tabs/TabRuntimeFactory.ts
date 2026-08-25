@@ -210,6 +210,7 @@ function composeTabRuntime(
         return resourceOwner.isDisposed;
       },
     },
+    autoResume: shell.autoResume,
   };
 }
 

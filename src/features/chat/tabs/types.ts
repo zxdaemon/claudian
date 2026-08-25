@@ -13,6 +13,7 @@ import type { NavigationController } from '../controllers/NavigationController';
 import type { SelectionController } from '../controllers/SelectionController';
 import type { StreamController } from '../controllers/StreamController';
 import type { ChatExecutionCoordinator } from '../execution/ChatExecutionCoordinator';
+import type { AutoResumeController } from './AutoResumeController';
 import type { LinkedContentController } from '../linked-content';
 import type { MessageRenderer } from '../rendering/MessageRenderer';
 import type { SubagentManager } from '../services/SubagentManager';
@@ -251,6 +252,9 @@ export interface AssembledTabRuntime {
 
   /** Reports operational disposal without exposing teardown authority. */
   readonly resources: TabRuntimeResourceState;
+
+  /** ARCD（fork）：连接断连自动唤醒控制器。 */
+  readonly autoResume: AutoResumeController;
 }
 
 export type TabProviderContext = Pick<

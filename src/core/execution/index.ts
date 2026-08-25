@@ -6,6 +6,11 @@ export {
   type ProviderSessionLifecycle,
 } from './ProviderExecutionBackend';
 export {
+  AUTO_RESUME_BACKOFF_SECONDS,
+  AUTO_RESUME_MAX_ATTEMPTS,
+  nextBackoffDelaySeconds,
+} from './autoResumeBackoff';
+export {
   type ProviderAssistantMessageStartedEvent,
   type ProviderAsyncSubagentCompletedEvent,
   type ProviderBackgroundEventScope,
@@ -14,6 +19,7 @@ export {
   type ProviderBackgroundTurnStartedEvent,
   type ProviderCancelledEvent,
   type ProviderCitationsEvent,
+  type ProviderConnectionDroppedEvent,
   type ProviderContextCompactedEvent,
   type ProviderExecutionErrorCategory,
   type ProviderExecutionErrorEvent,

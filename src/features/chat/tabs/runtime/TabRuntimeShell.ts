@@ -6,10 +6,12 @@ import { getEnabledProviderForModel } from '../../../../core/providers/modelRout
 import { ProviderRegistry } from '../../../../core/providers/ProviderRegistry';
 import { DEFAULT_CHAT_PROVIDER_ID } from '../../../../core/providers/types';
 import { getVaultPath } from '../../../../utils/path';
+import type { FeatureHost } from '../../../FeatureHost';
 import { ChatExecutionCoordinator } from '../../execution/ChatExecutionCoordinator';
 import { cleanupThinkingBlock } from '../../rendering/ThinkingBlockRenderer';
 import { createWelcomeElement } from '../../rendering/WelcomeRenderer';
 import { ChatState } from '../../state/ChatState';
+import { AutoResumeController } from '../AutoResumeController';
 import { restorePrePlanMode } from '../TabProviderState';
 import { TabSession } from '../TabSession';
 import {
@@ -93,10 +95,16 @@ export function buildTabRuntimeShell(
     executionCoordinator,
     () => options.onWorkChanged?.(runtimeRef.requirePublished()),
   );
+  const autoResume = createAutoResumeController(
+    options.plugin,
+    session,
+    runtimeRef,
+  );
   options.registerCleanup(
     'tab execution coordinator',
     () => session.disposeExecutionCoordinator(),
   );
+  options.registerCleanup('tab auto-resume', () => autoResume.dispose());
   const providerCatalogContext: TabProviderCatalogContext = Object.freeze({
     get id() {
       return session.id;
@@ -152,6 +160,7 @@ export function buildTabRuntimeShell(
       : null,
     state,
     dom,
+    autoResume,
   };
 }
 
@@ -287,15 +296,24 @@ function createTabExecutionCoordinator(
     interactionPort,
     vaultWorkingDirectory: getVaultPath(plugin.app) ?? '.',
     createId: createTabMessageId,
-    onRequestedEvent: event => (
-      runtimeRef.requirePublished().controllers.inputController.handleExecutionEvent(event)
-    ),
-    onSessionEvent: (event, context) => enqueueTabSessionEvent(
-      runtimeRef.requirePublished(),
-      plugin,
-      event,
-      context,
-    ),
+    onRequestedEvent: event => {
+      const tab = runtimeRef.requirePublished();
+      tab.autoResume.handleExecutionEvent(event);
+      return tab.controllers.inputController.handleExecutionEvent(event);
+    },
+    onSessionEvent: (event, context) => {
+      const tab = runtimeRef.requirePublished();
+      if (event.type === 'connection_dropped') {
+        tab.autoResume.handleConnectionDropped(event);
+        return undefined;
+      }
+      return enqueueTabSessionEvent(
+        tab,
+        plugin,
+        event,
+        context,
+      );
+    },
     onBackgroundWorkChanged: () => {
       options.onWorkChanged?.(runtimeRef.requirePublished());
     },
@@ -320,6 +338,61 @@ function createTabExecutionCoordinator(
         if (tab.lifecycleState === 'closing') return;
         tab.lifecycleState = isWarm ? 'warm' : 'cold';
       },
+    },
+  });
+}
+
+const AUTO_RESUME_LOG_PATH = '_meta/log/auto-resume.md';
+const AUTO_RESUME_LOG_HEADER = '# ARCD 自动唤醒日志\n\n> fork 特性：连接断连检测与自动唤醒动作记录。\n\n';
+
+/**
+ * ARCD（fork）：构造每 tab 的自动唤醒控制器。deps 全部惰性解析，
+ * 使控制器可在 shell 阶段创建（controllers 尚未装配完成）。
+ */
+function createAutoResumeController(
+  plugin: FeatureHost,
+  session: TabSession,
+  runtimeRef: PublishedTabRuntimeRef,
+): AutoResumeController {
+  const vault = plugin.app.vault;
+  return new AutoResumeController({
+    isEnabled: () => plugin.settings.autoResumeEnabled,
+    canStartTurn: () => session.acceptsIntents,
+    sendResume: async (content) => {
+      const tab = runtimeRef.requirePublished();
+      if (!tab.session.acceptsIntents) return false;
+      await tab.controllers.inputController.sendMessage({ content });
+      return true;
+    },
+    readHotMd: async () => {
+      try {
+        return await vault.adapter.read('_meta/hot.md');
+      } catch {
+        return '';
+      }
+    },
+    appendLog: async (line) => {
+      try {
+        let existing = '';
+        try {
+          existing = await vault.adapter.read(AUTO_RESUME_LOG_PATH);
+        } catch {
+          // 文件不存在：稍后带 header 创建。
+        }
+        if (!existing.trim()) {
+          existing = AUTO_RESUME_LOG_HEADER;
+        }
+        await vault.adapter.mkdir('_meta/log');
+        await vault.adapter.write(
+          AUTO_RESUME_LOG_PATH,
+          existing + `${new Date().toISOString()} ${line}\n`,
+        );
+      } catch {
+        // 日志失败不影响唤醒主流程。
+      }
+    },
+    notice: (message) => {
+      new Notice(message);
     },
   });
 }

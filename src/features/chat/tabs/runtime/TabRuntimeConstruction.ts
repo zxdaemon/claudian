@@ -7,6 +7,7 @@ import type { ChatExecutionCoordinator } from '../../execution/ChatExecutionCoor
 import type { MessageRenderer } from '../../rendering/MessageRenderer';
 import type { ChatState } from '../../state/ChatState';
 import type { TabAttention, TabReviewOutcome } from '../../state/types';
+import type { AutoResumeController } from '../AutoResumeController';
 import type { ForkContext } from '../TabForking';
 import type { TabSession } from '../TabSession';
 import type {
@@ -77,6 +78,7 @@ export interface TabRuntimeShellBundle extends TabProviderContext {
   readonly captureReviewableSettlement: ((outcome: TabReviewOutcome) => () => void) | null;
   readonly state: ChatState;
   readonly dom: TabDOMElements;
+  readonly autoResume: AutoResumeController;
 }
 
 export interface TabRuntimeControllerBundle {

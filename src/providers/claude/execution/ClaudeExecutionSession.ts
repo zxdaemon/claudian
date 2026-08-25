@@ -34,6 +34,10 @@ import { executeClaudeRewind } from '../runtime/ClaudeRewindService';
 import { getClaudeState } from '../types/providerState';
 import { ClaudeExecutionEventNormalizer } from './ClaudeExecutionEventNormalizer';
 import {
+  appendTextTail,
+  tailEndsWithConnectionDrop,
+} from './ConnectionDropDetector';
+import {
   type ClaudeEncodedExecutionRequest,
   ClaudeExecutionRequestEncoder,
   type ClaudeNativeResume,
@@ -63,6 +67,8 @@ interface ActiveRequestedRun {
   nativeAssistantId?: string;
   planCompleted: boolean;
   terminal: boolean;
+  /** ARCD：本 run 累积的 assistant 文本尾巴（4KB 滑窗），用于 result 路径断连检测。 */
+  textTail: string;
 }
 
 interface BackgroundTurn {
@@ -208,6 +214,7 @@ ClaudeExecutionStrategySink {
       historyReplayGeneration: null,
       planCompleted: false,
       terminal: false,
+      textTail: '',
     };
     this.activeRun = active;
     request.signal.addEventListener('abort', onRequestAbort, { once: true });
@@ -926,6 +933,10 @@ ClaudeExecutionStrategySink {
     >,
   ): void {
     if ('executionId' in target) {
+      if (event.type === 'text_delta') {
+        // ARCD：累积 assistant 文本尾巴，供 result 路径断连检测使用。
+        target.textTail = appendTextTail(target.textTail, event.text);
+      }
       this.emitRequested(
         target,
         event as WithoutScope<ProviderExecutionEvent>,
@@ -1035,6 +1046,16 @@ ClaudeExecutionStrategySink {
       planCompleted: active.planCompleted || undefined,
       reason,
     });
+    // ARCD：result 路径——query 正常 resolve 但 assistant 尾巴是连接级 API Error
+    //（"部分响应已成功传输"），此时无 error 分类可用，靠文本签名检测。
+    if (reason === 'completed' && tailEndsWithConnectionDrop(active.textTail)) {
+      const errorStart = active.textTail.lastIndexOf('API Error:');
+      this.emitSession({
+        type: 'connection_dropped',
+        category: 'transport',
+        message: active.textTail.slice(errorStart).trim(),
+      });
+    }
     this.endActiveRun(active);
   }
 
@@ -1075,6 +1096,17 @@ ClaudeExecutionStrategySink {
       type: 'execution_error',
       ...details,
     });
+    // ARCD：连接级断连 → 发 session 事件，供自动唤醒消费端退避重试。
+    if (
+      details.category === 'transport'
+      || details.category === 'process-exited'
+    ) {
+      this.emitSession({
+        type: 'connection_dropped',
+        category: details.category,
+        message: details.message,
+      });
+    }
     this.endActiveRun(active);
   }
 

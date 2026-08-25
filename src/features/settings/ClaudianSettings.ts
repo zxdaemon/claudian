@@ -419,6 +419,23 @@ export class ClaudianSettingTab extends PluginSettingTab {
           });
       });
 
+    // ARCD（fork）：连接断连自动唤醒开关。硬编码标签，不引入 i18n key。
+    new Setting(container)
+      .setName('Auto-resume on connection drop (ARCD fork)')
+      .setDesc(
+        'When the Claude connection drops mid-turn, auto-resume the conversation '
+        + 'from the hot.md focus hint (backoff 30/60/120s, stops after 3 attempts).',
+      )
+      .addToggle((toggle) => {
+        toggle
+          .setValue(this.plugin.settings.autoResumeEnabled ?? true)
+          .onChange(async (value) => {
+            await this.plugin.mutateSettings((settings) => {
+              settings.autoResumeEnabled = value;
+            });
+          });
+      });
+
     new Setting(container)
       .setName(t('settings.enableAutoScroll.name'))
       .setDesc(t('settings.enableAutoScroll.desc'))
