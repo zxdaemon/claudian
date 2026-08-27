@@ -5,6 +5,50 @@ import { ClaudeExecutionEventNormalizer } from '@/providers/claude/execution/Cla
 
 const msg = buildSDKMessage;
 
+describe('ClaudeExecutionEventNormalizer ARCD structured drop', () => {
+  it('carries the SDK API-error annotation onto the result event', () => {
+    const normalizer = new ClaudeExecutionEventNormalizer();
+    normalizer.normalize(msg({
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'API Error: Connection lost mid-response.' }],
+      },
+      isApiErrorMessage: true,
+    }), 'requested');
+
+    const events = normalizer.normalize(msg({ type: 'result' }), 'requested');
+    expect(events).toContainEqual({ type: 'result', apiErrorAnnotated: true });
+  });
+
+  it('does not annotate a normal completion', () => {
+    const normalizer = new ClaudeExecutionEventNormalizer();
+    normalizer.normalize(msg({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'all done' }] },
+    }), 'requested');
+
+    const events = normalizer.normalize(msg({ type: 'result' }), 'requested');
+    expect(events.some((e) => (
+      e.type === 'result' && e.apiErrorAnnotated === true
+    ))).toBe(false);
+  });
+
+  it('clears the annotation once the result consumes it', () => {
+    const normalizer = new ClaudeExecutionEventNormalizer();
+    normalizer.normalize(msg({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'boom' }] },
+      isApiErrorMessage: true,
+    }), 'requested');
+    normalizer.normalize(msg({ type: 'result' }), 'requested');
+
+    const events = normalizer.normalize(msg({ type: 'result' }), 'requested');
+    expect(events.some((e) => (
+      e.type === 'result' && e.apiErrorAnnotated === true
+    ))).toBe(false);
+  });
+});
+
 describe('ClaudeExecutionEventNormalizer task tools', () => {
   it('preserves a blocked decision for the matching native tool result', () => {
     const normalizer = new ClaudeExecutionEventNormalizer();

@@ -32,7 +32,7 @@ import {
   recalculateClaudeUsageContextWindow,
   transformSDKMessage,
 } from '../stream/transformClaudeMessage';
-import { looksLikeApiError } from './ConnectionDropDetector';
+import { isApiErrorAnnotatedMessage, looksLikeApiError } from './ConnectionDropDetector';
 
 type WithoutScope<T> = T extends unknown ? Omit<T, 'scope'> : never;
 
@@ -87,6 +87,7 @@ export type ClaudeNormalizedExecutionEvent =
   }
   | {
     readonly type: 'result';
+    readonly apiErrorAnnotated?: boolean;
   };
 
 export type ClaudeExecutionEventChannel = 'requested' | 'background';
@@ -106,6 +107,8 @@ interface NormalizationState {
   assistantStarted: boolean;
   sawStreamText: boolean;
   sawStreamThinking: boolean;
+  /** ARCD：最近一条 assistant 消息是否带 SDK API 错误注解（结构判类）。 */
+  apiErrorAnnotated: boolean;
 }
 
 export class ClaudeExecutionEventNormalizer {
@@ -185,6 +188,10 @@ export class ClaudeExecutionEventNormalizer {
       }
     }
 
+    if (message.type === 'assistant') {
+      // ARCD 结构判类：最近 assistant 消息的注解（末条注解即断连信号）。
+      state.apiErrorAnnotated = isApiErrorAnnotatedMessage(message);
+    }
     if (message.type === 'assistant' && message.uuid) {
       normalized.push({
         type: 'assistant_checkpoint',
@@ -192,7 +199,11 @@ export class ClaudeExecutionEventNormalizer {
       });
     }
     if (message.type === 'result') {
-      normalized.push({ type: 'result' });
+      normalized.push({
+        type: 'result',
+        apiErrorAnnotated: state.apiErrorAnnotated,
+      });
+      state.apiErrorAnnotated = false;
     }
     return normalized;
   }
@@ -237,6 +248,7 @@ export class ClaudeExecutionEventNormalizer {
     state.assistantStarted = false;
     state.sawStreamText = false;
     state.sawStreamThinking = false;
+    state.apiErrorAnnotated = false;
   }
 
   private normalizeStreamChunk(
@@ -340,6 +352,7 @@ function createNormalizationState(): NormalizationState {
     assistantStarted: false,
     sawStreamText: false,
     sawStreamThinking: false,
+    apiErrorAnnotated: false,
   };
 }
 

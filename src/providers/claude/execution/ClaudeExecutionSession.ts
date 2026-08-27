@@ -583,7 +583,11 @@ ClaudeExecutionStrategySink {
       }
       if (normalized.type === 'result') {
         if (this.activeRun) {
-          this.finishCompleted(this.activeRun, 'completed');
+          this.finishCompleted(
+            this.activeRun,
+            'completed',
+            normalized.apiErrorAnnotated,
+          );
         } else if (this.backgroundTurn) {
           this.finishBackgroundTurn('completed');
         }
@@ -1036,6 +1040,7 @@ ClaudeExecutionStrategySink {
   private finishCompleted(
     active: ActiveRequestedRun,
     reason: 'completed' | 'provider-ended',
+    apiErrorAnnotated?: boolean,
   ): void {
     if (active.terminal) return;
     this.setStatus('idle');
@@ -1048,12 +1053,20 @@ ClaudeExecutionStrategySink {
     });
     // ARCD：result 路径——query 正常 resolve 但 assistant 尾巴是连接级 API Error
     //（"部分响应已成功传输"），此时无 error 分类可用，靠文本签名检测。
-    if (reason === 'completed' && tailEndsWithConnectionDrop(active.textTail)) {
+    // P1：另加结构判类——SDK 为末条 assistant 消息打了 isApiErrorMessage 注解
+    //（server_error 家族实证 2026-08-27），语言/签名无关，与文本判类 OR 并发。
+    const tailDrop = (
+      reason === 'completed' && tailEndsWithConnectionDrop(active.textTail)
+    );
+    if (tailDrop || apiErrorAnnotated === true) {
       const errorStart = active.textTail.lastIndexOf('API Error:');
       this.emitSession({
         type: 'connection_dropped',
         category: 'transport',
-        message: active.textTail.slice(errorStart).trim(),
+        message: errorStart >= 0
+          ? active.textTail.slice(errorStart).trim()
+          : active.textTail.slice(-4096).trim()
+            || 'SDK-annotated API error message',
       });
     }
     this.endActiveRun(active);

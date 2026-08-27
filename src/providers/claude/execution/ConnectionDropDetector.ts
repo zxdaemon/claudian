@@ -22,7 +22,9 @@ const CONNECTION_DROP_PATTERNS: readonly RegExp[] = Object.freeze([
   /read\s*failed/i,
   /读取失败/,
   /econnreset/i,
-  /connection\s*(reset|closed|refused|terminated|dropped)/i,
+  /connection\s*(lost|reset|closed|refused|terminated|dropped)/i,
+  /mid[- ]?\s*response/i,
+  /incomplete/i,
   /socket\s*hang\s*up/i,
   /proxy\s*(error|failed)/i,
   /upstream\s*(error|failure|reset)/i,
@@ -41,6 +43,20 @@ export function isConnectionDropMessage(message: string): boolean {
   if (!trimmed.startsWith(API_ERROR_PREFIX)) return false;
   const body = trimmed.slice(API_ERROR_PREFIX.length);
   return CONNECTION_DROP_PATTERNS.some(pattern => pattern.test(body));
+}
+
+/**
+ * 结构判类：SDK 是否为该 assistant 消息打了 API 错误注解。
+ * server_error 家族实证（2026-08-27）：SDK 重试耗尽后合成的最终
+ * assistant 消息携带 `isApiErrorMessage: true`（语言/签名无关），
+ * 比文本模式表更权威；缺注解（undefined/false）回退文本判类。
+ */
+export function isApiErrorAnnotatedMessage(message: unknown): boolean {
+  return (
+    typeof message === 'object'
+    && message !== null
+    && (message as { isApiErrorMessage?: unknown }).isApiErrorMessage === true
+  );
 }
 
 /** 向文本滑窗追加一个 delta，返回截断到窗口大小的新尾巴。 */

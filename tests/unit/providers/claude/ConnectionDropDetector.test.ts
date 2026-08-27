@@ -1,5 +1,6 @@
 import {
   appendTextTail,
+  isApiErrorAnnotatedMessage,
   isConnectionDropMessage,
   looksLikeApiError,
   tailEndsWithConnectionDrop,
@@ -32,6 +33,12 @@ describe('isConnectionDropMessage', () => {
     expect(isConnectionDropMessage('API Error: read ECONNRESET')).toBe(true);
   });
 
+  it('matches the English mid-response variant (server_error family)', () => {
+    expect(isConnectionDropMessage(
+      'API Error: Connection lost mid-response. The response above may be incomplete.',
+    )).toBe(true);
+  });
+
   it('rejects non-connection API errors (HTTP-level retryable)', () => {
     expect(isConnectionDropMessage('API Error: 429 Too Many Requests')).toBe(false);
     expect(isConnectionDropMessage('API Error: 500 internal server error')).toBe(false);
@@ -41,6 +48,20 @@ describe('isConnectionDropMessage', () => {
   it('rejects messages without API Error prefix', () => {
     expect(isConnectionDropMessage('connection reset by peer')).toBe(false);
     expect(isConnectionDropMessage('代理或上游连接读取失败')).toBe(false);
+  });
+});
+
+describe('isApiErrorAnnotatedMessage', () => {
+  it('recognizes the SDK annotation regardless of error text language', () => {
+    expect(isApiErrorAnnotatedMessage({ isApiErrorMessage: true })).toBe(true);
+  });
+
+  it('rejects messages without the annotation', () => {
+    expect(isApiErrorAnnotatedMessage({ isApiErrorMessage: false })).toBe(false);
+    expect(isApiErrorAnnotatedMessage({})).toBe(false);
+    expect(isApiErrorAnnotatedMessage(null)).toBe(false);
+    expect(isApiErrorAnnotatedMessage(undefined)).toBe(false);
+    expect(isApiErrorAnnotatedMessage('true')).toBe(false);
   });
 });
 
