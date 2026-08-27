@@ -79,3 +79,20 @@ export function tailEndsWithConnectionDrop(textTail: string): boolean {
   if (textTail.length - index > MAX_SIGNATURE_END_SPAN) return false;
   return isConnectionDropMessage(textTail.slice(index));
 }
+
+/**
+ * server_error 家族判类（发现 4，2026-08-27 实弹）。
+ * server_error 事件的终止路径是 error 路径而非 result 路径：查询 reject、
+ * 无 result 事件、finishCompleted 从不到场。SDK 传递给 finishError 的错误
+ * 形态是裸分类串（"server_error"）或 API Error 文本，不含 connection 字样，
+ * 分类器原样落进 provider 兜底 → 连接门不放行。
+ * 语义：SDK 重试耗尽即连接级失效，归入 transport 同域自愈链。
+ */
+export function isServerErrorFamilyMessage(message: string): boolean {
+  const m = message.trim().toLowerCase();
+  return (
+    m.includes('server_error')
+    || m.includes('server error')
+    || m.startsWith('api error')
+  );
+}

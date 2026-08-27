@@ -47,6 +47,7 @@ import {
 import { ClaudeInteractionHandler } from './ClaudeInteractionHandler';
 import {
   appendTextTail,
+  isServerErrorFamilyMessage,
   tailEndsWithConnectionDrop,
 } from './ConnectionDropDetector';
 
@@ -1368,6 +1369,15 @@ function classifyClaudeError(
     normalized.includes('transport')
     || normalized.includes('connection')
   ) {
+    return {
+      category: 'transport',
+      message,
+      recoverable: true,
+    };
+  }
+  // 发现 4（2026-08-27 实弹）：SDK 重试耗尽后的 server_error 家族归入连接级，
+  // 使 finishError 的连接门放行 connection_dropped（与 transport 同走自愈链）。
+  if (isServerErrorFamilyMessage(message)) {
     return {
       category: 'transport',
       message,

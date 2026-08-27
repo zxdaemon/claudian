@@ -2,6 +2,7 @@ import {
   appendTextTail,
   isApiErrorAnnotatedMessage,
   isConnectionDropMessage,
+  isServerErrorFamilyMessage,
   looksLikeApiError,
   tailEndsWithConnectionDrop,
 } from '@/providers/claude/execution/ConnectionDropDetector';
@@ -108,5 +109,24 @@ describe('tailEndsWithConnectionDrop', () => {
     const report = '取证报告：断连签名为 API Error: 代理或上游连接读取失败，部分响应已成功传输。'
       + '后续正文。'.repeat(200);
     expect(tailEndsWithConnectionDrop(appendTextTail('', report))).toBe(false);
+  });
+});
+
+describe('isServerErrorFamilyMessage', () => {
+  it('matches raw server_error classification strings', () => {
+    expect(isServerErrorFamilyMessage('server_error')).toBe(true);
+    expect(isServerErrorFamilyMessage('Server error')).toBe(true);
+    expect(isServerErrorFamilyMessage('Error: server_error (502)')).toBe(true);
+  });
+
+  it('matches API Error prefixed messages', () => {
+    expect(isServerErrorFamilyMessage('API Error: Connection lost mid-response.')).toBe(true);
+    expect(isServerErrorFamilyMessage('  \napi error: proxy failed')).toBe(true);
+  });
+
+  it('rejects ordinary provider messages', () => {
+    expect(isServerErrorFamilyMessage('provider internal failure')).toBe(false);
+    expect(isServerErrorFamilyMessage('server unavailable check configuration')).toBe(false);
+    expect(isServerErrorFamilyMessage('')).toBe(false);
   });
 });
