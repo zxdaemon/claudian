@@ -47,7 +47,10 @@ import {
 import { ClaudeInteractionHandler } from './ClaudeInteractionHandler';
 import {
   appendTextTail,
+  isContentFilteredMessage,
   isServerErrorFamilyMessage,
+  lastApiErrorLine,
+  resolveEffectiveMessage,
   tailEndsWithConnectionDrop,
 } from './ConnectionDropDetector';
 
@@ -1079,10 +1082,14 @@ ClaudeExecutionStrategySink {
     missingProviderSessionId?: string,
   ): void {
     if (active.terminal) return;
+    // 发现 5（2026-09-05 实弹）：SDK 对非 success result 合成兜底消息 "unknown"，
+    // CLI 已把 API 错误原文（如 sensitive-information 拒绝）经 text_delta 流进
+    // textTail——用原文参与判类与展示，消除 "Error: unknown" 对真实原因的掩盖。
     const details = classifyClaudeError(
       error,
       this.providerSessionId,
       missingProviderSessionId,
+      lastApiErrorLine(active.textTail),
     );
     if (
       details.category === 'configuration'
@@ -1302,6 +1309,7 @@ function classifyClaudeError(
   error: unknown,
   expectedSessionId: string | null,
   explicitMissingSessionId?: string,
+  tailHint?: string | null,
 ): {
   category:
     | 'provider-session-missing'
@@ -1309,6 +1317,7 @@ function classifyClaudeError(
     | 'configuration'
     | 'transport'
     | 'process-exited'
+    | 'content-filtered'
     | 'provider'
     | 'unknown';
   message: string;
@@ -1318,6 +1327,9 @@ function classifyClaudeError(
   const message = error instanceof Error
     ? error.message
     : String(error);
+  // 发现 5：SDK 兜底消息（"unknown"）无信息量时用 assistant 尾巴原文替代，
+  // 使 content-filtered 等特征识别可命中，且 UI 展示真实原因。
+  const effectiveMessage = resolveEffectiveMessage(message, tailHint);
   const missingSessionId = explicitMissingSessionId
     ?? getMissingSessionId(error)
     ?? undefined;
@@ -1327,12 +1339,12 @@ function classifyClaudeError(
   ) {
     return {
       category: 'provider-session-missing',
-      message,
+      message: effectiveMessage,
       recoverable: true,
       missingProviderSessionId: missingSessionId,
     };
   }
-  const normalized = message.toLowerCase();
+  const normalized = effectiveMessage.toLowerCase();
   if (
     normalized.includes('authentication')
     || normalized.includes('unauthorized')
@@ -1340,7 +1352,7 @@ function classifyClaudeError(
   ) {
     return {
       category: 'authentication',
-      message,
+      message: effectiveMessage,
       recoverable: true,
     };
   }
@@ -1351,7 +1363,7 @@ function classifyClaudeError(
   ) {
     return {
       category: 'configuration',
-      message,
+      message: effectiveMessage,
       recoverable: true,
     };
   }
@@ -1361,7 +1373,7 @@ function classifyClaudeError(
   ) {
     return {
       category: 'process-exited',
-      message,
+      message: effectiveMessage,
       recoverable: true,
     };
   }
@@ -1371,22 +1383,33 @@ function classifyClaudeError(
   ) {
     return {
       category: 'transport',
-      message,
+      message: effectiveMessage,
       recoverable: true,
+    };
+  }
+  // 发现 5（2026-09-05 实弹）：API 输入安全过滤拒绝（sensitive information）
+  // 不可恢复——同上下文重发必然再被拒，归入 content-filtered（不进 ARCD
+  // 自愈链）。位次必须在 server_error 家族之前：原文以 "API Error:" 开头，
+  // 否则会被 startsWith('api error') 误归 transport 触发无意义重发。
+  if (isContentFilteredMessage(effectiveMessage)) {
+    return {
+      category: 'content-filtered',
+      message: effectiveMessage,
+      recoverable: false,
     };
   }
   // 发现 4（2026-08-27 实弹）：SDK 重试耗尽后的 server_error 家族归入连接级，
   // 使 finishError 的连接门放行 connection_dropped（与 transport 同走自愈链）。
-  if (isServerErrorFamilyMessage(message)) {
+  if (isServerErrorFamilyMessage(effectiveMessage)) {
     return {
       category: 'transport',
-      message,
+      message: effectiveMessage,
       recoverable: true,
     };
   }
   return {
     category: 'provider',
-    message,
+    message: effectiveMessage,
     recoverable: true,
   };
 }

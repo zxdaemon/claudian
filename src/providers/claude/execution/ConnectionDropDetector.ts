@@ -96,3 +96,46 @@ export function isServerErrorFamilyMessage(message: string): boolean {
     || m.startsWith('api error')
   );
 }
+
+/**
+ * 内容过滤拒绝判类（发现 5，2026-09-05 实弹）。
+ * API 输入安全过滤拒绝（"input may contain sensitive information"）不是连接级
+ * 断连：同上下文重发必然再被拒，ARCD 不应自动恢复（silent by design）。
+ * 实证（2026-09-05）：CLI 2.1.231 将该错误作为 assistant 尾巴文本输出且不打
+ * isApiErrorMessage 注解；SDK 层对非 success result 合成兜底消息 "unknown"，
+ * finishError 收到的 message 无信息量，真实原因只在 textTail。
+ * 判定位次：必须先于 isServerErrorFamilyMessage（"API Error:" 前缀会被
+ * server_error 家族吃掉归入 transport，导致 ARCD 误恢复）。
+ */
+export function isContentFilteredMessage(message: string): boolean {
+  return message.toLowerCase().includes('sensitive information');
+}
+
+/** SDK 兜底消息识别：无信息量（空或 "unknown"），需从 assistant 尾巴回收原文。 */
+export function isUninformativeErrorMessage(message: string): boolean {
+  const m = message.trim().toLowerCase();
+  return m === '' || m === 'unknown';
+}
+
+/**
+ * 从 assistant 文本尾巴回收最后一条 "API Error:" 起始的原文。
+ * CLI 把 API 错误原文写进 assistant 消息（text_delta 流经 textTail）；
+ * SDK reject 时 error.message 可能只剩 "unknown"——用本函数回收真实原因。
+ */
+export function lastApiErrorLine(textTail: string): string | null {
+  const index = textTail.lastIndexOf(API_ERROR_PREFIX);
+  if (index < 0) return null;
+  return textTail.slice(index).trim() || null;
+}
+
+/**
+ * 判类与展示的有效消息：SDK 兜底消息（无信息量）且有尾巴原文时用原文。
+ * 语义：原文参与判类（content-filtered 等特征识别）并透传到 UI，
+ * 消除 "Error: unknown" 对真实原因的掩盖。
+ */
+export function resolveEffectiveMessage(
+  message: string,
+  tailHint?: string | null,
+): string {
+  return tailHint && isUninformativeErrorMessage(message) ? tailHint : message;
+}

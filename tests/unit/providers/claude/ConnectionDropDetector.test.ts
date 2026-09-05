@@ -2,8 +2,12 @@ import {
   appendTextTail,
   isApiErrorAnnotatedMessage,
   isConnectionDropMessage,
+  isContentFilteredMessage,
   isServerErrorFamilyMessage,
+  isUninformativeErrorMessage,
+  lastApiErrorLine,
   looksLikeApiError,
+  resolveEffectiveMessage,
   tailEndsWithConnectionDrop,
 } from '@/providers/claude/execution/ConnectionDropDetector';
 
@@ -128,5 +132,81 @@ describe('isServerErrorFamilyMessage', () => {
     expect(isServerErrorFamilyMessage('provider internal failure')).toBe(false);
     expect(isServerErrorFamilyMessage('server unavailable check configuration')).toBe(false);
     expect(isServerErrorFamilyMessage('')).toBe(false);
+  });
+});
+
+describe('isContentFilteredMessage', () => {
+  it('matches the observed sensitive-information rejection (#5, 2026-09-05)', () => {
+    expect(isContentFilteredMessage(
+      'API Error: The request failed because the input may contain sensitive'
+      + ' information. Request id: 02178859',
+    )).toBe(true);
+  });
+
+  it('is case-insensitive on the signature', () => {
+    expect(isContentFilteredMessage('Input May Contain SENSITIVE INFORMATION')).toBe(true);
+  });
+
+  it('rejects connection-level and ordinary messages', () => {
+    expect(isContentFilteredMessage('API Error: 代理或上游连接读取失败，部分响应已成功传输')).toBe(false);
+    expect(isContentFilteredMessage('server_error')).toBe(false);
+    expect(isContentFilteredMessage('')).toBe(false);
+  });
+
+  it('ordering: must be checked before isServerErrorFamilyMessage (API Error prefix)', () => {
+    const observed = 'API Error: The request failed because the input may contain'
+      + ' sensitive information. Request id: 02178859';
+    expect(isContentFilteredMessage(observed)).toBe(true);
+    // server_error 家族也会命中（startsWith('api error')）——消费方判类位次保证
+    // content-filtered 优先，防止误归 transport 触发 ARCD 重发。
+    expect(isServerErrorFamilyMessage(observed)).toBe(true);
+  });
+});
+
+describe('isUninformativeErrorMessage', () => {
+  it('matches empty and SDK fallback messages', () => {
+    expect(isUninformativeErrorMessage('')).toBe(true);
+    expect(isUninformativeErrorMessage('   ')).toBe(true);
+    expect(isUninformativeErrorMessage('unknown')).toBe(true);
+    expect(isUninformativeErrorMessage('Unknown')).toBe(true);
+  });
+
+  it('keeps informative messages', () => {
+    expect(isUninformativeErrorMessage('Error: unknown (code 42)')).toBe(false);
+    expect(isUninformativeErrorMessage('connection reset')).toBe(false);
+  });
+});
+
+describe('lastApiErrorLine', () => {
+  it('recovers the trailing API error text from the text tail', () => {
+    const tail = appendTextTail('', 'partial answer text\n'
+      + 'API Error: The request failed because the input may contain sensitive information.');
+    expect(lastApiErrorLine(tail)).toBe(
+      'API Error: The request failed because the input may contain sensitive information.',
+    );
+  });
+
+  it('returns the last occurrence when several appear', () => {
+    const tail = appendTextTail('', 'API Error: first\nbody\nAPI Error: second');
+    expect(lastApiErrorLine(tail)).toBe('API Error: second');
+  });
+
+  it('returns null without the prefix', () => {
+    expect(lastApiErrorLine('plain assistant text')).toBeNull();
+    expect(lastApiErrorLine('')).toBeNull();
+  });
+});
+
+describe('resolveEffectiveMessage', () => {
+  it('substitutes the tail hint for uninformative SDK messages', () => {
+    expect(resolveEffectiveMessage('unknown', 'API Error: sensitive information rejected'))
+      .toBe('API Error: sensitive information rejected');
+    expect(resolveEffectiveMessage('', 'API Error: boom')).toBe('API Error: boom');
+  });
+
+  it('keeps the original message when it is informative or no hint exists', () => {
+    expect(resolveEffectiveMessage('connection reset', 'API Error: boom')).toBe('connection reset');
+    expect(resolveEffectiveMessage('unknown', null)).toBe('unknown');
+    expect(resolveEffectiveMessage('unknown', undefined)).toBe('unknown');
   });
 });

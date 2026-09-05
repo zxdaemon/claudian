@@ -227,6 +227,7 @@ export type ProviderExecutionErrorCategory =
   | 'configuration'
   | 'transport'
   | 'process-exited'
+  | 'content-filtered'
   | 'provider'
   | 'unknown';
 
